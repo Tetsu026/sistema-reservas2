@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atendente - Sistema de Reservas</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <h1>Painel do Atendente</h1>
+                <button class="btn btn-secondary" onclick="window.location.href='index.html'">
+                    Voltar ao Menu
+                </button>
+            </div>
+        </header>
+
+        <main>
+            <div class="tabs">
+                <button class="tab-button active" onclick="showTab('criar')">Criar Reserva</button>
+                <button class="tab-button" onclick="showTab('listar')">Listar Reservas</button>
+            </div>
+
+            <div id="criar-tab" class="tab-content active">
+                <div class="form-section">
+                    <h2>Nova Reserva</h2>
+                    <form id="reserva-form">
+                        <div class="form-group">
+                            <label for="data">Data:</label>
+                            <input type="date" id="data" name="data" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="hora">Horário:</label>
+                            <select id="hora" name="hora" required>
+                                <option value="">Selecione o horário</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="mesa">Mesa:</label>
+                            <select id="mesa" name="mesa" required>
+                                <option value="">Selecione a mesa</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="pessoas">Número de pessoas:</label>
+                            <input type="number" id="pessoas" name="pessoas" min="1" max="20" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="responsavel">Nome do responsável:</label>
+                            <input type="text" id="responsavel" name="responsavel" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Criar Reserva</button>
+                    </form>
+                </div>
+            </div>
+
+            <div id="listar-tab" class="tab-content">
+                <div class="list-section">
+                    <div class="section-header">
+                        <h2>Reservas Existentes</h2>
+                        <button class="btn btn-secondary" onclick="carregarReservas()">Atualizar</button>
+                    </div>
+                    <div class="filter-section">
+                        <input type="text" id="filtro-responsavel" placeholder="Filtrar por responsável...">
+                        <select id="filtro-status">
+                            <option value="">Todos os status</option>
+                            <option value="reservada">Reservada</option>
+                            <option value="confirmada">Confirmada</option>
+                            <option value="cancelada">Cancelada</option>
+                        </select>
+                    </div>
+                    <div id="reservas-lista" class="reservas-grid"></div>
+                </div>
+            </div>
+        </main>
+
+        <div id="loading" class="loading hidden">Carregando...</div>
+        <div id="message" class="message hidden"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            configurarFormulario();
+            carregarReservas();
+        });
+
+        function configurarFormulario() {
+            const hoje = new Date().toISOString().split('T')[0];
+            document.getElementById('data').min = hoje;
+            const selectHora = document.getElementById('hora');
+            for (let h = 11; h <= 23; h++) {
+                for (let m = 0; m < 60; m += 30) {
+                    const hora = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                    const option = document.createElement('option');
+                    option.value = hora;
+                    option.textContent = hora;
+                    selectHora.appendChild(option);
+                }
+            }
+            const selectMesa = document.getElementById('mesa');
+            for (let i = 1; i <= 10; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = `Mesa ${i}`;
+                selectMesa.appendChild(option);
+            }
+            document.getElementById('reserva-form').addEventListener('submit', criarReserva);
+            document.getElementById('filtro-responsavel').addEventListener('input', filtrarReservas);
+            document.getElementById('filtro-status').addEventListener('change', filtrarReservas);
+        }
+
+        async function criarReserva(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const reserva = {
+                data: formData.get('data'),
+                hora: formData.get('hora'),
+                mesa: parseInt(formData.get('mesa')),
+                pessoas: parseInt(formData.get('pessoas')),
+                responsavel: formData.get('responsavel').trim()
+            };
+            if (!reserva.responsavel) {
+                showMessage('Nome do responsável é obrigatório', 'error');
+                return;
+            }
+            showLoading(true);
+            try {
+                const response = await fetch('/api/reservas', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(reserva)
+                });
+                const result = await response.json();
+                if (result.ok) {
+                    showMessage('Reserva criada com sucesso!', 'success');
+                    e.target.reset();
+                    if (document.getElementById('listar-tab').classList.contains('active')) {
+                        carregarReservas();
+                    }
+                } else {
+                    showMessage(result.message, 'error');
+                }
+            } catch {
+                showMessage('Erro ao criar reserva. Tente novamente.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function carregarReservas() {
+            showLoading(true);
+            try {
+                const response = await fetch('/api/reservas');
+                const result = await response.json();
+                if (result.ok) {
+                    window.todasReservas = result.data;
+                    exibirReservas(result.data);
+                } else {
+                    showMessage('Erro ao carregar reservas', 'error');
+                }
+            } catch {
+                showMessage('Erro ao carregar reservas. Tente novamente.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function exibirReservas(reservas) {
+            const container = document.getElementById('reservas-lista');
+            if (reservas.length === 0) {
+                container.innerHTML = '<div class="empty-state">Nenhuma reserva encontrada</div>';
+                return;
+            }
+            container.innerHTML = reservas.map(reserva => `
+                <div class="reserva-card status-${reserva.status}">
+                    <div class="reserva-header">
+                        <h3>Mesa ${reserva.mesa}</h3>
+                        <span class="status-badge status-${reserva.status}">${getStatusText(reserva.status)}</span>
+                    </div>
+                    <div class="reserva-details">
+                        <p><strong>Data:</strong> ${formatarData(reserva.data)}</p>
+                        <p><strong>Horário:</strong> ${reserva.hora}</p>
+                        <p><strong>Pessoas:</strong> ${reserva.pessoas}</p>
+                        <p><strong>Responsável:</strong> ${reserva.responsavel}</p>
+                        ${reserva.garcom_nome ? `<p><strong>Garçom:</strong> ${reserva.garcom_nome}</p>` : ''}
+                    </div>
+                    <div class="reserva-actions">
+                        ${reserva.status === 'reservada' ?
+                    `<button class="btn btn-danger btn-sm" onclick="cancelarReserva(${reserva.id})">Cancelar</button>` :
+                    '<span class="disabled-action">Não é possível cancelar</span>'
+                }
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function cancelarReserva(id) {
+            if (!confirm('Tem certeza que deseja cancelar esta reserva?')) return;
+            showLoading(true);
+            try {
+                const response = await fetch(`/api/reservas/${id}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+                if (result.ok) {
+                    showMessage('Reserva cancelada com sucesso!', 'success');
+                    carregarReservas();
+                } else {
+                    showMessage(result.message, 'error');
+                }
+            } catch {
+                showMessage('Erro ao cancelar reserva. Tente novamente.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function filtrarReservas() {
+            const filtroResponsavel = document.getElementById('filtro-responsavel').value.toLowerCase();
+            const filtroStatus = document.getElementById('filtro-status').value;
+            if (!window.todasReservas) return;
+            const reservasFiltradas = window.todasReservas.filter(reserva => {
+                const matchResponsavel = reserva.responsavel.toLowerCase().includes(filtroResponsavel);
+                const matchStatus = !filtroStatus || reserva.status === filtroStatus;
+                return matchResponsavel && matchStatus;
+            });
+            exibirReservas(reservasFiltradas);
+        }
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            if (tabName === 'listar') carregarReservas();
+        }
+
+        function getStatusText(status) {
+            const statusMap = {
+                'reservada': 'Reservada',
+                'confirmada': 'Confirmada',
+                'cancelada': 'Cancelada'
+            };
+            return statusMap[status] || status;
+        }
+
+        function formatarData(data) {
+            return new Date(data + 'T00:00:00').toLocaleDateString('pt-BR');
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('hidden', !show);
+        }
+
+        function showMessage(message, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = message;
+            messageEl.className = `message ${type}`;
+            messageEl.classList.remove('hidden');
+            setTimeout(() => {
+                messageEl.classList.add('hidden');
+            }, 5000);
+        }
+    </script>
+</body>
+
+</html>

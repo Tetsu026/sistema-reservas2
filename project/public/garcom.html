@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Garçom - Sistema de Reservas</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <h1>Painel do Garçom</h1>
+                <button class="btn btn-secondary" onclick="window.location.href='index.html'">
+                    Voltar ao Menu
+                </button>
+            </div>
+        </header>
+
+        <main>
+            <div class="info-section">
+                <h2>Confirmar Reservas</h2>
+                <p>Selecione uma reserva pendente para confirmar e atribuir a um garçom.</p>
+            </div>
+
+            <div class="controls-section">
+                <button class="btn btn-secondary" onclick="carregarReservasPendentes()">Atualizar Lista</button>
+                <select id="filtro-mesa">
+                    <option value="">Todas as mesas</option>
+                </select>
+            </div>
+
+            <div id="reservas-pendentes" class="reservas-grid"></div>
+
+            <div id="modal-confirmacao" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Confirmar Reserva</h3>
+                        <button class="modal-close" onclick="fecharModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="detalhes-reserva"></div>
+                        <div class="form-group">
+                            <label for="garcom-select">Selecione o garçom responsável:</label>
+                            <select id="garcom-select" required>
+                                <option value="">Escolha um garçom...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
+                        <button class="btn btn-primary" onclick="confirmarReserva()">Confirmar Reserva</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <div id="loading" class="loading hidden">Carregando...</div>
+        <div id="message" class="message hidden"></div>
+    </div>
+
+    <script>
+        let reservaSelecionada = null;
+        let garcons = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            configurarFiltros();
+            carregarGarcons();
+            carregarReservasPendentes();
+        });
+
+        function configurarFiltros() {
+            const selectMesa = document.getElementById('filtro-mesa');
+            for (let i = 1; i <= 10; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = `Mesa ${i}`;
+                selectMesa.appendChild(option);
+            }
+            selectMesa.addEventListener('change', filtrarPorMesa);
+        }
+
+        async function carregarGarcons() {
+            try {
+                const response = await fetch('/api/garcons');
+                const result = await response.json();
+                if (result.ok) {
+                    garcons = result.data;
+                    const select = document.getElementById('garcom-select');
+                    select.innerHTML = '<option value="">Escolha um garçom...</option>';
+                    garcons.forEach(garcom => {
+                        const option = document.createElement('option');
+                        option.value = garcom.id;
+                        option.textContent = garcom.nome;
+                        select.appendChild(option);
+                    });
+                }
+            } catch {
+                showMessage('Erro ao carregar lista de garçons', 'error');
+            }
+        }
+
+        async function carregarReservasPendentes() {
+            showLoading(true);
+            try {
+                const response = await fetch('/api/reservas');
+                const result = await response.json();
+                if (result.ok) {
+                    const reservasPendentes = result.data.filter(reserva => reserva.status === 'reservada');
+                    window.todasReservasPendentes = reservasPendentes;
+                    exibirReservasPendentes(reservasPendentes);
+                } else {
+                    showMessage('Erro ao carregar reservas', 'error');
+                }
+            } catch {
+                showMessage('Erro ao carregar reservas. Tente novamente.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function exibirReservasPendentes(reservas) {
+            const container = document.getElementById('reservas-pendentes');
+            if (reservas.length === 0) {
+                container.innerHTML = '<div class="empty-state">Nenhuma reserva pendente para confirmação</div>';
+                return;
+            }
+            container.innerHTML = reservas.map(reserva => `
+                <div class="reserva-card reserva-pendente">
+                    <div class="reserva-header">
+                        <h3>Mesa ${reserva.mesa}</h3>
+                        <span class="status-badge status-reservada">Pendente</span>
+                    </div>
+                    <div class="reserva-details">
+                        <p><strong>Data:</strong> ${formatarData(reserva.data)}</p>
+                        <p><strong>Horário:</strong> ${reserva.hora}</p>
+                        <p><strong>Pessoas:</strong> ${reserva.pessoas}</p>
+                        <p><strong>Responsável:</strong> ${reserva.responsavel}</p>
+                    </div>
+                    <div class="reserva-actions">
+                        <button class="btn btn-primary" onclick="abrirModalConfirmacao(${reserva.id})">
+                            Confirmar Reserva
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function abrirModalConfirmacao(reservaId) {
+            const reserva = window.todasReservasPendentes.find(r => r.id === reservaId);
+            if (!reserva) return;
+            reservaSelecionada = reserva;
+            document.getElementById('detalhes-reserva').innerHTML = `
+                <div class="reserva-details-modal">
+                    <h4>Mesa ${reserva.mesa}</h4>
+                    <p><strong>Data:</strong> ${formatarData(reserva.data)}</p>
+                    <p><strong>Horário:</strong> ${reserva.hora}</p>
+                    <p><strong>Pessoas:</strong> ${reserva.pessoas}</p>
+                    <p><strong>Responsável:</strong> ${reserva.responsavel}</p>
+                </div>
+            `;
+            document.getElementById('garcom-select').value = '';
+            document.getElementById('modal-confirmacao').classList.remove('hidden');
+        }
+
+        function fecharModal() {
+            document.getElementById('modal-confirmacao').classList.add('hidden');
+            reservaSelecionada = null;
+        }
+
+        async function confirmarReserva() {
+            const garcomId = document.getElementById('garcom-select').value;
+            if (!garcomId) {
+                showMessage('Selecione um garçom para confirmar a reserva', 'error');
+                return;
+            }
+            if (!reservaSelecionada) {
+                showMessage('Erro: nenhuma reserva selecionada', 'error');
+                return;
+            }
+            showLoading(true);
+            try {
+                const response = await fetch(`/api/reservas/${reservaSelecionada.id}/confirm`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ garcom_id: parseInt(garcomId) })
+                });
+                const result = await response.json();
+                if (result.ok) {
+                    showMessage(`Reserva confirmada com sucesso! Garçom: ${result.data.garcom}`, 'success');
+                    fecharModal();
+                    carregarReservasPendentes();
+                } else {
+                    showMessage(result.message, 'error');
+                }
+            } catch {
+                showMessage('Erro ao confirmar reserva. Tente novamente.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function filtrarPorMesa() {
+            const mesaSelecionada = document.getElementById('filtro-mesa').value;
+            if (!window.todasReservasPendentes) return;
+            let reservasFiltradas = window.todasReservasPendentes;
+            if (mesaSelecionada) {
+                reservasFiltradas = reservasFiltradas.filter(reserva =>
+                    reserva.mesa == mesaSelecionada
+                );
+            }
+            exibirReservasPendentes(reservasFiltradas);
+        }
+
+        function formatarData(data) {
+            return new Date(data + 'T00:00:00').toLocaleDateString('pt-BR');
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('hidden', !show);
+        }
+
+        function showMessage(message, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = message;
+            messageEl.className = `message ${type}`;
+            messageEl.classList.remove('hidden');
+            setTimeout(() => {
+                messageEl.classList.add('hidden');
+            }, 5000);
+        }
+
+        document.getElementById('modal-confirmacao').addEventListener('click', (e) => {
+            if (e.target.id === 'modal-confirmacao') {
+                fecharModal();
+            }
+        });
+    </script>
+</body>
+
+</html>

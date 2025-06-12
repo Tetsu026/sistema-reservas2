@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerente - Sistema de Reservas</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <h1>Painel do Gerente</h1>
+                <button class="btn btn-secondary" onclick="window.location.href='index.html'">
+                    Voltar ao Menu
+                </button>
+            </div>
+        </header>
+
+        <main>
+            <div class="tabs">
+                <button class="tab-button active" onclick="showTab('periodo')">Relatório por Período</button>
+                <button class="tab-button" onclick="showTab('mesa')">Relatório por Mesa</button>
+                <button class="tab-button" onclick="showTab('garcom')">Relatório por Garçom</button>
+            </div>
+
+            <div id="periodo-tab" class="tab-content active">
+                <div class="report-section">
+                    <h2>Relatório por Período</h2>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="data-inicio">Data inicial:</label>
+                            <input type="date" id="data-inicio" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="data-fim">Data final:</label>
+                            <input type="date" id="data-fim" required>
+                        </div>
+                        <button class="btn btn-primary" onclick="gerarRelatorioPeriodo()">
+                            Gerar Relatório
+                        </button>
+                    </div>
+                    <div id="relatorio-periodo" class="report-content"></div>
+                </div>
+            </div>
+
+            <div id="mesa-tab" class="tab-content">
+                <div class="report-section">
+                    <h2>Relatório por Mesa</h2>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="mesa-select">Selecione a mesa:</label>
+                            <select id="mesa-select" required>
+                                <option value="">Escolha uma mesa...</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" onclick="gerarRelatorioMesa()">
+                            Gerar Relatório
+                        </button>
+                    </div>
+                    <div id="relatorio-mesa" class="report-content"></div>
+                </div>
+            </div>
+
+            <div id="garcom-tab" class="tab-content">
+                <div class="report-section">
+                    <h2>Relatório por Garçom</h2>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="garcom-select-relatorio">Selecione o garçom:</label>
+                            <select id="garcom-select-relatorio" required>
+                                <option value="">Escolha um garçom...</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" onclick="gerarRelatorioGarcom()">
+                            Gerar Relatório
+                        </button>
+                    </div>
+                    <div id="relatorio-garcom" class="report-content"></div>
+                </div>
+            </div>
+        </main>
+
+        <div id="loading" class="loading hidden">Carregando...</div>
+        <div id="message" class="message hidden"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            configurarFormularios();
+            carregarGarcons();
+        });
+
+        function configurarFormularios() {
+            const hoje = new Date();
+            const seteDiasAtras = new Date();
+            seteDiasAtras.setDate(hoje.getDate() - 7);
+            document.getElementById('data-inicio').value = seteDiasAtras.toISOString().split('T')[0];
+            document.getElementById('data-fim').value = hoje.toISOString().split('T')[0];
+
+            const selectMesa = document.getElementById('mesa-select');
+            for (let i = 1; i <= 10; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = `Mesa ${i}`;
+                selectMesa.appendChild(option);
+            }
+        }
+
+        async function carregarGarcons() {
+            try {
+                const response = await fetch('/api/garcons');
+                const result = await response.json();
+                if (result.ok) {
+                    const select = document.getElementById('garcom-select-relatorio');
+                    result.data.forEach(garcom => {
+                        const option = document.createElement('option');
+                        option.value = garcom.id;
+                        option.textContent = garcom.nome;
+                        select.appendChild(option);
+                    });
+                }
+            } catch {
+                showMessage('Erro ao carregar lista de garçons', 'error');
+            }
+        }
+
+        async function gerarRelatorioPeriodo() {
+            const dataInicio = document.getElementById('data-inicio').value;
+            const dataFim = document.getElementById('data-fim').value;
+
+            if (!dataInicio || !dataFim || dataInicio > dataFim) {
+                showMessage('Verifique as datas selecionadas', 'error');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const response = await fetch(`/api/relatorios/periodo?inicio=${dataInicio}&fim=${dataFim}`);
+                const result = await response.json();
+                if (result.ok) {
+                    exibirRelatorioPeriodo(result.data);
+                } else {
+                    showMessage(result.message, 'error');
+                }
+            } catch {
+                showMessage('Erro ao gerar relatório', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function exibirRelatorioPeriodo(data) {
+            const container = document.getElementById('relatorio-periodo');
+            const { periodo, resumo, reservas } = data;
+
+            let html = `
+                <div class="report-header">
+                    <h3>Período: ${formatarData(periodo.inicio)} a ${formatarData(periodo.fim)}</h3>
+                </div>
+                <div class="summary-cards">
+                    <div class="summary-card"><h4>Total de Reservas</h4><p class="summary-number">${resumo.total}</p></div>
+                    <div class="summary-card"><h4>Reservadas</h4><p class="summary-number">${resumo.reservadas}</p></div>
+                    <div class="summary-card"><h4>Confirmadas</h4><p class="summary-number">${resumo.confirmadas}</p></div>
+                    <div class="summary-card"><h4>Canceladas</h4><p class="summary-number">${resumo.canceladas}</p></div>
+                </div>
+            `;
+
+            if (reservas.length > 0) {
+                html += `
+                    <div class="detailed-report">
+                        <h4>Detalhes das Reservas</h4>
+                        <div class="reservas-list">
+                            ${reservas.map(reserva => `
+                                <div class="reserva-item status-${reserva.status}">
+                                    <div class="reserva-info">
+                                        <strong>Mesa ${reserva.mesa}</strong> - ${formatarData(reserva.data)} ${reserva.hora}<br>
+                                        <span>${reserva.responsavel} (${reserva.pessoas} pessoas)</span>
+                                        ${reserva.garcom_nome ? `<br><span>${reserva.garcom_nome}</span>` : ''}
+                                    </div>
+                                    <span class="status-badge status-${reserva.status}">${getStatusText(reserva.status)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        async function gerarRelatorioMesa() {
+            const mesa = document.getElementById('mesa-select').value;
+            if (!mesa) {
+                showMessage('Selecione uma mesa', 'error');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const response = await fetch(`/api/relatorios/mesa/${mesa}`);
+                const result = await response.json();
+                if (result.ok) {
+                    exibirRelatorioMesa(result.data);
+                } else {
+                    showMessage(result.message, 'error');
+                }
+            } catch {
+                showMessage('Erro ao gerar relatório', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function exibirRelatorioMesa(data) {
+            const container = document.getElementById('relatorio-mesa');
+            const { mesa, total_reservas, reservas } = data;
+
+            let html = `
+                <div class="report-header">
+                    <h3>Relatório da Mesa ${mesa}</h3>
+                    <p>Total de reservas: ${total_reservas}</p>
+                </div>
+            `;
+
+            if (reservas.length > 0) {
+                html += `
+                    <div class="detailed-report">
+                        <div class="reservas-list">
+                            ${reservas.map(reserva => `
+                                <div class="reserva-item status-${reserva.status}">
+                                    <div class="reserva-info">
+                                        <strong>${formatarData(reserva.data)} ${reserva.hora}</strong><br>
+                                        <span>${reserva.responsavel} (${reserva.pessoas} pessoas)</span>
+                                        ${reserva.garcom_nome ? `<br><span>${reserva.garcom_nome}</span>` : ''}
+                                    </div>
+                                    <span class="status-badge status-${reserva.status}">${getStatusText(reserva.status)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                html += '<div class="empty-state">Nenhuma reserva encontrada para esta mesa</div>';
+            }
+
+            container.innerHTML = html;
+        }
+
+        async function gerarRelatorioGarcom() {
+            const garcomId = document.getElementById('garcom-select-relatorio').value;
+            if (!garcomId) {
+                showMessage('Selecione um garçom', 'error');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const response = await fetch(`/api/relatorios/garcom/${garcomId}`);
+                const result = await response.json();
+                if (result.ok) {
+                    exibirRelatorioGarcom(result.data);
+                } else {
+                    showMessage(result.message, 'error');
+                }
+            } catch {
+                showMessage('Erro ao gerar relatório', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function exibirRelatorioGarcom(data) {
+            const container = document.getElementById('relatorio-garcom');
+            const { garcom, total_confirmacoes, reservas_confirmadas } = data;
+
+            let html = `
+                <div class="report-header">
+                    <h3>Relatório do Garçom: ${garcom}</h3>
+                    <p>Total de confirmações: ${total_confirmacoes}</p>
+                </div>
+            `;
+
+            if (reservas_confirmadas.length > 0) {
+                html += `
+                    <div class="detailed-report">
+                        <div class="reservas-list">
+                            ${reservas_confirmadas.map(reserva => `
+                                <div class="reserva-item status-confirmada">
+                                    <div class="reserva-info">
+                                        <strong>Mesa ${reserva.mesa} - ${formatarData(reserva.data)} ${reserva.hora}</strong><br>
+                                        <span>${reserva.responsavel} (${reserva.pessoas} pessoas)</span>
+                                    </div>
+                                    <span class="status-badge status-confirmada">Confirmada</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                html += '<div class="empty-state">Nenhuma reserva confirmada por este garçom</div>';
+            }
+
+            container.innerHTML = html;
+        }
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        function getStatusText(status) {
+            const statusMap = {
+                'reservada': 'Reservada',
+                'confirmada': 'Confirmada',
+                'cancelada': 'Cancelada'
+            };
+            return statusMap[status] || status;
+        }
+
+        function formatarData(data) {
+            return new Date(data + 'T00:00:00').toLocaleDateString('pt-BR');
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('hidden', !show);
+        }
+
+        function showMessage(message, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = message;
+            messageEl.className = `message ${type}`;
+            messageEl.classList.remove('hidden');
+            setTimeout(() => {
+                messageEl.classList.add('hidden');
+            }, 5000);
+        }
+    </script>
+</body>
+
+</html>

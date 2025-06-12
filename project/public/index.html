@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Reservas - Restaurante</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Sistema de Reservas</h1>
+            <p>Restaurante Vila Sésamo</p>
+        </header>
+
+        <main>
+            <div class="profile-selection">
+                <h2>Selecione seu perfil:</h2>
+
+                <div class="profiles">
+                    <div class="profile-card" onclick="redirectTo('atendente.html')">
+                        <div class="profile-icon"></div>
+                        <h3>Atendente</h3>
+                        <p>Criar e cancelar reservas</p>
+                        <button class="btn btn-primary">Acessar</button>
+                    </div>
+
+                    <div class="profile-card" onclick="redirectTo('garcom.html')">
+                        <div class="profile-icon"></div>
+                        <h3>Garçom</h3>
+                        <p>Confirmar reservas</p>
+                        <button class="btn btn-secondary">Acessar</button>
+                    </div>
+
+                    <div class="profile-card" onclick="redirectTo('gerente.html')">
+                        <div class="profile-icon"></div>
+                        <h3>Gerente</h3>
+                        <p>Visualizar relatórios</p>
+                        <button class="btn btn-tertiary">Acessar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h3>Informações do Sistema</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <strong>Mesas disponíveis:</strong>
+                        <span>10 mesas (1 a 10)</span>
+                    </div>
+                    <div class="info-item">
+                        <strong>Horário de funcionamento:</strong>
+                        <span>11:00 às 23:00</span>
+                    </div>
+                    <div class="info-item">
+                        <strong>Capacidade máxima por mesa:</strong>
+                        <span>20 pessoas</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function redirectTo(page) {
+            window.location.href = page;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const cards = document.querySelectorAll('.profile-card');
+            cards.forEach((card, index) => {
+                card.style.animationDelay = `${index * 0.2}s`;
+                card.classList.add('fade-in');
+            });
+        });
+    </script>
+</body>
+
+</html>
